@@ -73,7 +73,7 @@ function App() {
 
     return (
         <div className="min-h-screen bg-gray-100 p-6">
-            <h1 className="text-4xl font-bold text-blue-600 mb-6">TempoTrack 🚀</h1>
+            <h1 className="text-4xl font-bold text-blue-600 mb-6">FastLife 🚀</h1>
             <AddActivity onAdd={handleAdd} />
 
             <div className="grid gap-4">
