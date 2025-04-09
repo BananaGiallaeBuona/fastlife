@@ -6,32 +6,29 @@ import { supabase } from './supabaseClient';
 function App() {
     const [activities, setActivities] = useState([]);
 
-    useEffect(() => {
-        fetchActivities();
-    }, []);
-
     const fetchActivities = async () => {
         const { data, error } = await supabase
             .from('activities')
             .select('*')
             .order('id', { ascending: true });
-
         if (error) {
-            console.error("Errore nel fetch:", error);
+            console.error("Errore nel fetch delle attività:", error);
         } else {
             setActivities(data);
         }
     };
 
+    useEffect(() => {
+        fetchActivities();
+    }, []);
+
     const handleAdd = async (activity) => {
-        console.log("Invio al cloud:", activity);
         const { data, error } = await supabase
             .from('activities')
             .insert([activity])
             .select();
-
         if (error) {
-            console.error("Errore nell’inserimento:", error);
+            console.error("Errore nell'inserimento dell'attività:", error);
         } else {
             setActivities([...activities, ...data]);
         }
@@ -42,11 +39,10 @@ function App() {
             .from('activities')
             .delete()
             .eq('id', id);
-
         if (error) {
-            console.error("Errore nella cancellazione:", error);
+            console.error("Errore nell'eliminazione dell'attività:", error);
         } else {
-            setActivities(activities.filter(a => a.id !== id));
+            setActivities(activities.filter((a) => a.id !== id));
         }
     };
 

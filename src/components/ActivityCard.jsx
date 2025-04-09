@@ -1,70 +1,80 @@
 ﻿import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../supabaseClient';
 
-function ActivityCard({ activity }) {
-    // Stato per indicare se il timer è in esecuzione e per memorizzare l'id della sessione corrente
+function ActivityCard({ activity, onDelete }) {
+    // Stato per gestione timer locale (in minuti) e sessione corrente
     const [isRunning, setIsRunning] = useState(false);
     const [currentSessionId, setCurrentSessionId] = useState(null);
-    // Stato per memorizzare il totale settimanale (in minuti) dell'attività
     const [weeklyTime, setWeeklyTime] = useState(0);
-    // Stato per il timer locale (usato per aggiornare l'interfaccia, se desiderato)
     const intervalRef = useRef(null);
 
-    // Funzione per calcolare il tempo settimanale speso (somma delle durate)
+    // Funzione per ricalcolare il tempo settimanale speso per questa attività
     const fetchWeeklyTime = async () => {
-        // Calcola il primo giorno della settimana corrente (supponiamo che la settimana inizi il lunedì)
+        // Calcola il lunedì corrente (inizio settimana)
         const now = new Date();
-        const currentDay = now.getDay(); // Domenica=0, Lunedì=1, ...
-        const diff = currentDay === 0 ? -6 : 1 - currentDay; // se domenica, torna al lunedì precedente
+        const currentDay = now.getDay(); // Domenica=0, Lunedì=1, ecc.
+        const diff = currentDay === 0 ? -6 : 1 - currentDay; // se Domenica, torna al lunedì precedente
         const monday = new Date(now);
         monday.setDate(now.getDate() + diff);
         monday.setHours(0, 0, 0, 0);
         const isoMonday = monday.toISOString();
 
-        // Recupera le sessioni per questa attività che hanno start_time dalla mezzanotte del lunedì corrente
         const { data, error } = await supabase
-            .from('activity_sessions')
+            .from('activity_session')
             .select('duration')
             .eq('activity_id', activity.id)
             .gte('start_time', isoMonday);
-
         if (error) {
-            console.error("Errore nel fetch delle sessioni settimanali:", error);
+            console.error("Errore nel fetch delle sessioni:", error);
             return;
         }
-
-        // Somma tutte le durate (duration)
-        const totalMinutes = data.reduce((acc, session) => acc + (session.duration || 0), 0);
-        setWeeklyTime(totalMinutes);
+        const total = data.reduce((acc, session) => acc + (session.duration || 0), 0);
+        setWeeklyTime(total);
     };
 
-    // Carica il tempo settimanale quando il componente viene montato
+    // Sottoscrizione Realtime per questa attività
     useEffect(() => {
+        const channel = supabase
+            .channel(`realtime:activity_session:${activity.id}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'activity_session',
+                    filter: `activity_id=eq.${activity.id}`,
+                },
+                (payload) => {
+                    console.log("Realtime update per activity", activity.id, ":", payload);
+                    fetchWeeklyTime();
+                }
+            )
+            .subscribe();
+
+        // Carica il tempo settimanale al montaggio del componente
         fetchWeeklyTime();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, [activity.id]);
 
-    // Funzione per creare una nuova sessione ("Start")
+    // Funzione per iniziare una sessione ("Start")
     const handleStart = async () => {
-        // Inserisci una nuova riga nella tabella activity_sessions
         const { data, error } = await supabase
-            .from('activity_sessions')
-            .insert([
-                {
-                    activity_id: activity.id,
-                    start_time: new Date().toISOString(),
-                },
-            ])
+            .from('activity_session')
+            .insert([{ activity_id: activity.id, start_time: new Date().toISOString() }])
             .select();
         if (error) {
             console.error("Errore all'avvio della sessione:", error);
             return;
         }
-        // Imposta l'id della sessione corrente e segnala che il timer è in esecuzione
         setCurrentSessionId(data[0].id);
         setIsRunning(true);
-        // (Facoltativo) Se vuoi aggiornare l'interfaccia ogni minuto, puoi avviare un intervallo locale
+        // (Opzionale) Puoi impostare un intervallo locale se vuoi mostrare il tempo in tempo reale
         intervalRef.current = setInterval(() => {
-            // Puoi eventualmente aggiornare qualche stato locale per mostrare il tempo corrente in tempo reale
+            // Questo intervallo è solo per l'aggiornamento visivo locale (se desiderato)
+            // Se la sincronizzazione è in realtime, potresti non averne bisogno
         }, 60000);
     };
 
@@ -72,9 +82,8 @@ function ActivityCard({ activity }) {
     const handleStop = async () => {
         if (!currentSessionId) return;
         const stopTime = new Date();
-        // Recupera la sessione per calcolare la durata trascorsa
         const { data: sessionData, error: fetchError } = await supabase
-            .from('activity_sessions')
+            .from('activity_session')
             .select('start_time')
             .eq('id', currentSessionId)
             .single();
@@ -85,30 +94,31 @@ function ActivityCard({ activity }) {
         const startTime = new Date(sessionData.start_time);
         const minutesElapsed = Math.floor((stopTime - startTime) / 60000);
 
-        // Aggiorna la sessione con il campo end_time e la durata
         const { error: updateError } = await supabase
-            .from('activity_sessions')
+            .from('activity_session')
             .update({
                 end_time: stopTime.toISOString(),
                 duration: minutesElapsed,
             })
             .eq('id', currentSessionId);
         if (updateError) {
-            console.error("Errore nello stop della sessione:", updateError);
+            console.error("Errore nel fermare la sessione:", updateError);
         } else {
             setIsRunning(false);
             setCurrentSessionId(null);
             clearInterval(intervalRef.current);
-            // Aggiorna il tempo settimanale ricalcolando le sessioni
             fetchWeeklyTime();
         }
     };
+
+    const ore = Math.floor(weeklyTime / 60);
+    const minuti = weeklyTime % 60;
 
     return (
         <div className="bg-white p-4 rounded shadow-md my-2">
             <h2 className="text-xl font-bold">{activity.name}</h2>
             <p className="text-sm">
-                Tempo settimanale speso: {Math.floor(weeklyTime / 60)}h {weeklyTime % 60}min
+                Tempo settimanale speso: {ore}h {minuti}min
             </p>
             <div className="mt-2 flex gap-2">
                 {!isRunning ? (
@@ -120,6 +130,9 @@ function ActivityCard({ activity }) {
                         Stop
                     </button>
                 )}
+                <button onClick={onDelete} className="bg-red-600 text-white px-3 py-1 rounded">
+                    Elimina
+                </button>
             </div>
         </div>
     );
