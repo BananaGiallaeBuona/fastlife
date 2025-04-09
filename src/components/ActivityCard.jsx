@@ -1,45 +1,50 @@
-﻿import { useEffect, useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 
-const ActivityCard = ({ activity, index, updateActivity, resetActivity }) => {
-    const [isRunning, setIsRunning] = useState(false);
+function ActivityCard({ activity, onDelete }) {
+    const [time, setTime] = useState(activity.spentTime || 0);
+    const [running, setRunning] = useState(false);
+    const interval = useRef(null);
 
     useEffect(() => {
-        let interval;
-        if (isRunning) {
-            interval = setInterval(() => {
-                updateActivity(index, 1); // +1 minuto ogni 60 secondi
-            }, 60000);
+        if (running) {
+            interval.current = setInterval(() => {
+                setTime((prev) => prev + 1);
+            }, 60000); // 1 minuto
+        } else {
+            clearInterval(interval.current);
         }
-        return () => clearInterval(interval);
-    }, [isRunning]);
+        return () => clearInterval(interval.current);
+    }, [running]);
 
-    const hours = Math.floor(activity.spentTime / 60);
-    const minutes = activity.spentTime % 60;
+    const handleReset = () => {
+        setTime(0);
+        setRunning(false);
+    };
+
+    const ore = Math.floor(time / 60);
+    const minuti = time % 60;
 
     return (
-        <div className="bg-white p-4 rounded shadow">
-            <h3 className="text-lg font-semibold">{activity.name}</h3>
-            <p>🎯 Obiettivo settimanale: {Math.floor(activity.weeklyGoal / 60)}h {activity.weeklyGoal % 60}min</p>
-            <p>⏱️ Tempo speso: {hours}h {minutes}min</p>
-
-            <div className="mt-2 flex gap-2">
+        <div className="bg-white p-4 rounded shadow-md max-w-md mx-auto flex flex-col gap-2">
+            <h2 className="text-xl font-bold">{activity.name}</h2>
+            <p>🎯 Obiettivo settimanale: {Math.round(activity.weeklyGoal / 60)}h</p>
+            <p>⏱️ Tempo speso: {ore}h {minuti}min</p>
+            <div className="flex gap-2">
                 <button
-                    onClick={() => setIsRunning(!isRunning)}
-                    className={`px-4 py-2 rounded text-white ${isRunning ? 'bg-red-500' : 'bg-green-500'
-                        }`}
+                    onClick={() => setRunning(!running)}
+                    className={`px-4 py-1 rounded ${running ? 'bg-red-500' : 'bg-green-500'} text-white`}
                 >
-                    {isRunning ? 'Stop' : 'Start'}
+                    {running ? 'Stop' : 'Start'}
                 </button>
-
-                <button
-                    onClick={() => resetActivity(index)}
-                    className="bg-yellow-500 text-white px-4 py-2 rounded"
-                >
+                <button onClick={handleReset} className="px-4 py-1 rounded bg-gray-400 text-white">
                     Reset
+                </button>
+                <button onClick={onDelete} className="px-4 py-1 rounded bg-red-600 text-white">
+                    Elimina
                 </button>
             </div>
         </div>
     );
-};
+}
 
 export default ActivityCard;

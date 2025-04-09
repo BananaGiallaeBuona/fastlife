@@ -6,84 +6,60 @@ import { supabase } from './supabaseClient';
 function App() {
     const [activities, setActivities] = useState([]);
 
-    // 📥 Carica tutte le attività al primo avvio
     useEffect(() => {
         fetchActivities();
     }, []);
 
     const fetchActivities = async () => {
-        const { data, error } = await supabase.from('activities').select('*').order('id', { ascending: true });
-        if (error) console.error(error);
-        else setActivities(data);
-    };
-
-    // 📤 Aggiunge una nuova attività nel cloud
-    const handleAdd = async (activity) => {
-        console.log("Invio al cloud:", activity); // <--- DEBUG
-
         const { data, error } = await supabase
             .from('activities')
-            .insert([{ ...activity }])
+            .select('*')
+            .order('id', { ascending: true });
+
+        if (error) {
+            console.error("Errore nel fetch:", error);
+        } else {
+            setActivities(data);
+        }
+    };
+
+    const handleAdd = async (activity) => {
+        console.log("Invio al cloud:", activity);
+        const { data, error } = await supabase
+            .from('activities')
+            .insert([activity])
             .select();
 
         if (error) {
-            console.error('Errore nell’inserimento:', error); // <--- DEBUG
+            console.error("Errore nell’inserimento:", error);
         } else {
-            console.log('Attività inserita:', data); // <--- DEBUG
-            setActivities((prev) => [...prev, ...data]);
+            setActivities([...activities, ...data]);
         }
     };
 
-
-    // 🔄 Aggiorna il tempo speso (spentTime)
-    const updateActivity = async (index, deltaMinutes) => {
-        const updated = [...activities];
-        updated[index].spentTime = Math.max(0, updated[index].spentTime + deltaMinutes);
-        const id = updated[index].id;
-
+    const handleDelete = async (id) => {
         const { error } = await supabase
             .from('activities')
-            .update({ spentTime: updated[index].spentTime })
+            .delete()
             .eq('id', id);
 
         if (error) {
-            console.error('Errore nell’aggiornamento:', error);
+            console.error("Errore nella cancellazione:", error);
         } else {
-            setActivities(updated);
-        }
-    };
-
-    // 🗑️ Reset attività (tempo riportato a 0)
-    const resetActivity = async (index) => {
-        const updated = [...activities];
-        updated[index].spentTime = 0;
-        const id = updated[index].id;
-
-        const { error } = await supabase
-            .from('activities')
-            .update({ spentTime: 0 })
-            .eq('id', id);
-
-        if (error) {
-            console.error('Errore nel reset:', error);
-        } else {
-            setActivities(updated);
+            setActivities(activities.filter(a => a.id !== id));
         }
     };
 
     return (
-        <div className="min-h-screen bg-gray-100 p-6">
-            <h1 className="text-4xl font-bold text-blue-600 mb-6">FastLife 🚀</h1>
+        <div className="min-h-screen bg-gray-100 p-4">
+            <h1 className="text-4xl font-bold text-center mb-4">FastLife 🚀</h1>
             <AddActivity onAdd={handleAdd} />
-
-            <div className="grid gap-4">
-                {activities.map((a, index) => (
+            <div className="mt-6 space-y-4">
+                {activities.map((activity) => (
                     <ActivityCard
-                        key={a.id}
-                        index={index}
-                        activity={a}
-                        updateActivity={updateActivity}
-                        resetActivity={resetActivity}
+                        key={activity.id}
+                        activity={activity}
+                        onDelete={() => handleDelete(activity.id)}
                     />
                 ))}
             </div>
