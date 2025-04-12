@@ -66,4 +66,11 @@ const styles = StyleSheet.create({
   },
 });
 
+KeyEvent.onKeyUpListener((keyEvent) => {
+  console.log("Key pressed:", keyEvent.keyCode);
+  if (keyEvent.keyCode === 25) { // ad esempio, 25 per il tasto volume giù
+    handleKeyPress();
+  }
+});
+
 export default ShortcutListener;
