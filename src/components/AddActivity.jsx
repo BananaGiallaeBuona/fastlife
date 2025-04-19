@@ -1,46 +1,40 @@
-﻿import { useState } from 'react';
+﻿import React, { useState } from 'react';
+import { supabase } from '../supabaseClient';
 
-function AddActivity({ onAdd }) {
+export default function AddActivity({ onAdd }) {
     const [name, setName] = useState('');
-    const [goal, setGoal] = useState('');
+    const [weeklyGoal, setWeeklyGoal] = useState('');
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!name || !goal) return;
-
-        const parsedGoal = parseFloat(goal.replace(',', '.'));
-        const newActivity = {
-            name,
-            weeklyGoal: Math.round(parsedGoal * 60),
-            spentTime: 0,
-        };
-
-        onAdd(newActivity);
+        await supabase
+            .from('activities')
+            .insert({ name, weeklyGoal: parseFloat(weeklyGoal), spentTime: 0 });
         setName('');
-        setGoal('');
+        setWeeklyGoal('');
+        onAdd();
     };
 
     return (
-        <form onSubmit={handleSubmit} className="flex gap-2 items-center justify-center flex-wrap">
+        <form onSubmit={handleSubmit} className="mb-6 flex space-x-2">
             <input
-                type="text"
+                className="border p-2 flex-1"
                 placeholder="Nome attività"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="border px-2 py-1 rounded"
             />
             <input
-                type="text"
-                placeholder="Obiettivo settimanale (ore)"
-                value={goal}
-                onChange={(e) => setGoal(e.target.value)}
-                className="border px-2 py-1 rounded w-48"
+                className="border p-2 w-24"
+                placeholder="Obiettivo sett."
+                value={weeklyGoal}
+                onChange={(e) => setWeeklyGoal(e.target.value)}
             />
-            <button type="submit" className="bg-blue-500 text-white px-4 py-1 rounded hover:bg-blue-600">
+            <button
+                type="submit"
+                className="bg-blue-600 text-white px-4 rounded"
+            >
                 Aggiungi
             </button>
         </form>
     );
 }
-
-export default AddActivity;

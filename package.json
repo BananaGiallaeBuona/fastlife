@@ -1,5 +1,5 @@
 {
-  "name": "tempotrack",
+  "name": "fastLife",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -16,6 +16,7 @@
     "postcss": "^8.5.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-native-keyevent": "^0.3.2",
     "recharts": "^2.15.2",
     "tailwindcss": "^4.1.3",
     "vite-plugin-pwa": "^1.0.0"
