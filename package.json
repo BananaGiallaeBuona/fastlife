@@ -31,5 +31,6 @@
     "eslint-plugin-react-refresh": "^0.4.19",
     "globals": "^15.15.0",
     "vite": "^6.2.0"
+>>>>>>> fc2cff7517e597a5dfe9e7c8bc490c4a74cda3d5
   }
 }
