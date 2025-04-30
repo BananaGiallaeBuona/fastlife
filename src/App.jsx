@@ -7,21 +7,21 @@ function App() {
     const [activities, setActivities] = useState([]);
     const [sessions, setSessions] = useState([]);
 
-    // 1) Carica attività e sessioni iniziali
+    // 1) Carica attività e sessioni iniziali + setta la subscription Realtime
     useEffect(() => {
         fetchActivities();
         fetchSessions();
 
         // ────────────────────────────────────────────────────────────────
-        // 2) Sostituisci qui la vecchia subscription con un Channel V2
+        // Realtime Channel v2 per activity_session
         // ────────────────────────────────────────────────────────────────
         const channel = supabase
-            .channel('public:activity_session')                  // nome univoco del channel
+            .channel('public:activity_session') // nome univoco del channel
             .on(
-                'postgres_changes',                                // tutti gli eventi Postgres
+                'postgres_changes',
                 { event: '*', schema: 'public', table: 'activity_session' },
                 () => {
-                    // ogni volta che INSERT / UPDATE / DELETE su activity_session
+                    // ad ogni INSERT/UPDATE/DELETE ricarica solo le sessioni aperte
                     fetchSessions();
                 }
             )
@@ -35,18 +35,24 @@ function App() {
 
     // fetch delle attività, con le pinned in cima
     const fetchActivities = async () => {
-        const { data, error } = await supabase.from('activities').select('*');
+        const { data, error } = await supabase
+            .from('activities')
+            .select('*');
         if (!error) {
             setActivities(data.sort((a, b) => b.pinned - a.pinned));
         }
     };
 
-    // fetch delle sessioni
+    // fetch delle sessioni APERTE (ended_at IS NULL)
     const fetchSessions = async () => {
         const { data, error } = await supabase
             .from('activity_session')
-            .select('*');
-        if (!error) setSessions(data);
+            .select('*')
+            .is('ended_at', null)
+            .order('started_at', { ascending: true });
+        if (!error) {
+            setSessions(data);
+        }
     };
 
     // inizia una nuova sessione
@@ -54,6 +60,7 @@ function App() {
         await supabase
             .from('activity_session')
             .insert({ activity_id: activityId });
+        // fetchSessions verrà richiamato dalla subscription
     };
 
     // ferma la sessione attiva
@@ -62,6 +69,7 @@ function App() {
             .from('activity_session')
             .update({ ended_at: new Date().toISOString() })
             .eq('id', sessionId);
+        // fetchSessions verrà richiamato dalla subscription
     };
 
     // toggle pin su un’attività
@@ -79,9 +87,9 @@ function App() {
             <AddActivity onAdd={fetchActivities} />
             <div className="space-y-4">
                 {activities.map((act) => {
-                    // trovo se c'è una sessione attiva
+                    // trova la sessione aperta (se esiste) per questa attività
                     const activeSession = sessions.find(
-                        (s) => s.activity_id === act.id && !s.ended_at
+                        (s) => s.activity_id === act.id
                     );
                     return (
                         <ActivityCard
@@ -89,7 +97,7 @@ function App() {
                             activity={act}
                             activeSession={activeSession}
                             onStart={() => handleStart(act.id)}
-                            onStop={() => handleStop(activeSession.id)}
+                            onStop={() => handleStop(activeSession?.id)}
                             onTogglePin={() => togglePin(act.id, !act.pinned)}
                         />
                     );
