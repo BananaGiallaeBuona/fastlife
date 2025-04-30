@@ -7,33 +7,24 @@ function App() {
     const [activities, setActivities] = useState([]);
     const [sessions, setSessions] = useState([]);
 
-    // 1) Carica attività e sessioni iniziali + setta la subscription Realtime
     useEffect(() => {
         fetchActivities();
         fetchSessions();
 
-        // ────────────────────────────────────────────────────────────────
-        // Realtime Channel v2 per activity_session
-        // ────────────────────────────────────────────────────────────────
         const channel = supabase
-            .channel('public:activity_session') // nome univoco del channel
+            .channel('public:activity_session')
             .on(
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'activity_session' },
-                () => {
-                    // ad ogni INSERT/UPDATE/DELETE ricarica solo le sessioni aperte
-                    fetchSessions();
-                }
+                () => fetchSessions()
             )
             .subscribe();
 
         return () => {
-            // pulisci il channel quando il componente smonta
             supabase.removeChannel(channel);
         };
     }, []);
 
-    // fetch delle attività, con le pinned in cima
     const fetchActivities = async () => {
         const { data, error } = await supabase
             .from('activities')
@@ -43,7 +34,6 @@ function App() {
         }
     };
 
-    // fetch delle sessioni APERTE (ended_at IS NULL)
     const fetchSessions = async () => {
         const { data, error } = await supabase
             .from('activity_session')
@@ -55,24 +45,21 @@ function App() {
         }
     };
 
-    // inizia una nuova sessione
     const handleStart = async (activityId) => {
         await supabase
             .from('activity_session')
             .insert({ activity_id: activityId });
-        // fetchSessions verrà richiamato dalla subscription
+        fetchSessions();
     };
 
-    // ferma la sessione attiva
     const handleStop = async (sessionId) => {
         await supabase
             .from('activity_session')
             .update({ ended_at: new Date().toISOString() })
             .eq('id', sessionId);
-        // fetchSessions verrà richiamato dalla subscription
+        fetchSessions();
     };
 
-    // toggle pin su un’attività
     const togglePin = async (activityId, pinned) => {
         await supabase
             .from('activities')
@@ -87,7 +74,6 @@ function App() {
             <AddActivity onAdd={fetchActivities} />
             <div className="space-y-4">
                 {activities.map((act) => {
-                    // trova la sessione aperta (se esiste) per questa attività
                     const activeSession = sessions.find(
                         (s) => s.activity_id === act.id
                     );
