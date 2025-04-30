@@ -12,29 +12,36 @@ function App() {
         fetchActivities();
         fetchSessions();
 
-        // sottoscrivi in realtime alle activity_session
-        const sub = supabase
-            .from('activity_session')
-            .on('*', () => {
-                fetchSessions();
-            })
+        // ────────────────────────────────────────────────────────────────
+        // 2) Sostituisci qui la vecchia subscription con un Channel V2
+        // ────────────────────────────────────────────────────────────────
+        const channel = supabase
+            .channel('public:activity_session')                  // nome univoco del channel
+            .on(
+                'postgres_changes',                                // tutti gli eventi Postgres
+                { event: '*', schema: 'public', table: 'activity_session' },
+                () => {
+                    // ogni volta che INSERT / UPDATE / DELETE su activity_session
+                    fetchSessions();
+                }
+            )
             .subscribe();
 
         return () => {
-            supabase.removeSubscription(sub);
+            // pulisci il channel quando il componente smonta
+            supabase.removeChannel(channel);
         };
     }, []);
 
+    // fetch delle attività, con le pinned in cima
     const fetchActivities = async () => {
-        const { data, error } = await supabase
-            .from('activities')
-            .select('*');
+        const { data, error } = await supabase.from('activities').select('*');
         if (!error) {
-            // ordina le pinned in cima
             setActivities(data.sort((a, b) => b.pinned - a.pinned));
         }
     };
 
+    // fetch delle sessioni
     const fetchSessions = async () => {
         const { data, error } = await supabase
             .from('activity_session')
@@ -42,12 +49,14 @@ function App() {
         if (!error) setSessions(data);
     };
 
+    // inizia una nuova sessione
     const handleStart = async (activityId) => {
         await supabase
             .from('activity_session')
             .insert({ activity_id: activityId });
     };
 
+    // ferma la sessione attiva
     const handleStop = async (sessionId) => {
         await supabase
             .from('activity_session')
@@ -55,6 +64,7 @@ function App() {
             .eq('id', sessionId);
     };
 
+    // toggle pin su un’attività
     const togglePin = async (activityId, pinned) => {
         await supabase
             .from('activities')
