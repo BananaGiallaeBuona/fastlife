@@ -7,67 +7,64 @@ export default function ActivityCard({
     onStop,
     onTogglePin,
 }) {
-    const [msElapsed, setMsElapsed] = useState(0);
+    /* live timer ─────────────────── */
+    const [elapsed, setElapsed] = useState(0);
 
     useEffect(() => {
-        let intervalId;
-
-        if (activeSession) {
-            const startTs = new Date(activeSession.started_at).getTime();
-            // inizializza contatore
-            setMsElapsed(Date.now() - startTs);
-
-            // aggiorna ogni secondo
-            intervalId = setInterval(() => {
-                setMsElapsed(Date.now() - startTs);
-            }, 1000);
-        } else {
-            setMsElapsed(0);
+        if (!activeSession) {
+            setElapsed(0);
+            return;
         }
 
-        return () => clearInterval(intervalId);
+        function tick() {
+            const start = new Date(activeSession.started_at).getTime();
+            setElapsed(Math.floor((Date.now() - start) / 60000)); // minuti interi
+        }
+
+        tick();                       // primo calcolo immediato
+        const id = setInterval(tick, 60000);
+
+        return () => clearInterval(id);
     }, [activeSession]);
 
-    const formatTime = (ms) => {
-        const total = Math.floor(ms / 1000);
-        const h = Math.floor(total / 3600);
-        const m = Math.floor((total % 3600) / 60);
-        const s = total % 60;
-        return [
-            h ? `${h} h` : null,
-            m ? `${m} m` : null,
-            `${s < 10 ? '0' : ''}${s}s`
-        ].filter(Boolean).join(' ');
-    };
+    /* helpers ────────────────────── */
+    const minutesLabel = elapsed === 1 ? 'minuto' : 'minuti';
 
+    /* UI ─────────────────────────── */
     return (
-        <div className="flex items-center justify-between p-4 bg-white rounded shadow">
+        <div className="border p-4 rounded shadow-sm flex items-center justify-between">
             <div>
                 <h2 className="text-xl font-semibold">{activity.name}</h2>
-                <p className="text-sm text-gray-600">
-                    {activeSession
-                        ? `⏱ ${formatTime(msElapsed)}`
-                        : '⏸️'}
-                </p>
+                {activeSession && (
+                    <p className="text-sm text-gray-600 mt-1">
+                        {elapsed} {minutesLabel}
+                    </p>
+                )}
             </div>
-            <div className="flex items-center space-x-2">
+
+            <div className="flex gap-2">
                 {activeSession ? (
                     <button
-                        onClick={() => onStop(activeSession.id)}
-                        className="px-3 py-1 bg-red-500 text-white rounded"
+                        onClick={onStop}
+                        className="px-3 py-1 bg-red-600 text-white rounded"
                     >
                         Stop
                     </button>
                 ) : (
                     <button
                         onClick={onStart}
-                        className="px-3 py-1 bg-green-500 text-white rounded"
+                        className="px-3 py-1 bg-green-600 text-white rounded"
                     >
                         Start
                     </button>
                 )}
-                <button onClick={onTogglePin} className="text-2xl">
-                    {activity.pinned ? '📌' : '📍'}
+
+                <button
+                    onClick={onTogglePin}
+                    className={`px-2 py-1 border rounded ${activity.pinned ? 'bg-yellow-400' : 'bg-gray-200'
+                        }`}
+                >
+                    📌
                 </button>
             </div>
         </div>

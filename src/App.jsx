@@ -3,10 +3,13 @@ import { supabase } from './supabaseClient';
 import AddActivity from './components/AddActivity';
 import ActivityCard from './components/ActivityCard';
 
-function App() {
+export default function App() {
     const [activities, setActivities] = useState([]);
     const [sessions, setSessions] = useState([]);
 
+    /* ──────────────────────────────────
+       CARICAMENTO INIZIALE + REALTIME
+    ─────────────────────────────────── */
     useEffect(() => {
         fetchActivities();
         fetchSessions();
@@ -16,76 +19,73 @@ function App() {
             .on(
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'activity_session' },
-                () => fetchSessions()
+                fetchSessions            // richiama direttamente la funzione
             )
             .subscribe();
 
-        return () => {
-            supabase.removeChannel(channel);
-        };
+        return () => supabase.removeChannel(channel);
     }, []);
 
-    const fetchActivities = async () => {
+    /* ──────────────────────────
+       QUERY ATTIVITÀ  (pinned in cima)
+    ─────────────────────────── */
+    async function fetchActivities() {
         const { data, error } = await supabase
             .from('activities')
-            .select('*');
-        if (!error) {
-            setActivities(data.sort((a, b) => b.pinned - a.pinned));
-        }
-    };
+            .select('*')
+            .order('pinned', { ascending: false });
 
-    // fetch delle sessioni
-    const fetchSessions = async () => {
+        if (!error) setActivities(data);
+    }
+
+    /* ──────────────────────────
+       QUERY SESSIONI  (tutte)
+    ─────────────────────────── */
+    async function fetchSessions() {
         const { data, error } = await supabase
             .from('activity_session')
             .select('*')
             .order('started_at', { ascending: true });
 
-        if (!error) {
-            // tieni solo quelle ancora aperte
-            setSessions(data.filter(s => !s.ended_at));
-        }
-    };
+        if (!error) setSessions(data);
+    }
 
-    const handleStart = async (activityId) => {
-        await supabase
-            .from('activity_session')
-            .insert({ activity_id: activityId });
-        fetchSessions();
-    };
+    /* ─────────────
+       HANDLER
+    ────────────── */
+    const startSession = (activity_id) =>
+        supabase.from('activity_session').insert({ activity_id });
 
-    const handleStop = async (sessionId) => {
-        await supabase
-            .from('activity_session')
+    const stopSession = (session_id) =>
+        supabase.from('activity_session')
             .update({ ended_at: new Date().toISOString() })
-            .eq('id', sessionId);
-        fetchSessions();
-    };
+            .eq('id', session_id);
 
-    const togglePin = async (activityId, pinned) => {
-        await supabase
-            .from('activities')
-            .update({ pinned })
-            .eq('id', activityId);
-        fetchActivities();
-    };
+    const togglePin = (id, pinned) =>
+        supabase.from('activities').update({ pinned }).eq('id', id)
+            .then(fetchActivities);
 
+    /* ─────────────
+       RENDER
+    ────────────── */
     return (
         <div className="p-8 max-w-xl mx-auto">
-            <h1 className="text-3xl mb-6">FastLife 🚀</h1>
+            <h1 className="text-3xl font-bold mb-6">FastLife 🚀</h1>
+
             <AddActivity onAdd={fetchActivities} />
+
             <div className="space-y-4">
                 {activities.map((act) => {
-                    const activeSession = sessions.find(
-                        (s) => s.activity_id === act.id
+                    const active = sessions.find(
+                        (s) => s.activity_id === act.id && !s.ended_at
                     );
                     return (
                         <ActivityCard
                             key={act.id}
                             activity={act}
-                            activeSession={activeSession}
-                            onStart={() => handleStart(act.id)}
-                            onStop={() => handleStop(activeSession?.id)}
+                            activeSession={active}
+                            onStart={() => startSession(act.id)}
+                            onStop={active ? () => stopSession(active.id) : null}
                             onTogglePin={() => togglePin(act.id, !act.pinned)}
                         />
                     );
@@ -94,5 +94,3 @@ function App() {
         </div>
     );
 }
-
-export default App;
