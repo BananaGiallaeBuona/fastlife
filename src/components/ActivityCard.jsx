@@ -29,14 +29,14 @@ export default function ActivityCard({
     }, [activeSession]);
 
     const formatTime = (ms) => {
-        const totalSec = Math.floor(ms / 1000);
-        const h = Math.floor(totalSec / 3600);
-        const m = Math.floor((totalSec % 3600) / 60);
-        const s = totalSec % 60;
+        const total = Math.floor(ms / 1000);
+        const h = Math.floor(total / 3600);
+        const m = Math.floor((total % 3600) / 60);
+        const s = total % 60;
         return [
-            h > 0 ? `${h}h` : null,
-            `${m}m`,
-            `${s}s`
+            h ? `${h} h` : null,
+            m ? `${m} m` : null,
+            `${s < 10 ? '0' : ''}${s}s`
         ].filter(Boolean).join(' ');
     };
 

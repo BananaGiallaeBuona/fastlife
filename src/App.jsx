@@ -34,14 +34,16 @@ function App() {
         }
     };
 
+    // fetch delle sessioni
     const fetchSessions = async () => {
         const { data, error } = await supabase
             .from('activity_session')
             .select('*')
-            .is('ended_at', null)
             .order('started_at', { ascending: true });
+
         if (!error) {
-            setSessions(data);
+            // tieni solo quelle ancora aperte
+            setSessions(data.filter(s => !s.ended_at));
         }
     };
 
