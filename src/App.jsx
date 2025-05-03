@@ -37,10 +37,11 @@ export default function App() {
     const start = async id => {
         const active = sessions.find(s => !s.end_time);
         if (active) {
-            alert("Hai già un'attività in corso. Fermala prima di iniziarne un'altra.");
+            alert("Hai già un'attività in corso. Fermala prima.");
             return;
         }
         await supabase.from('activity_session').insert({ activity_id: id });
+        await fetchSessions(); // ⬅ AGGIUNTO: forza aggiornamento
     };
 
     const stop = sid =>
@@ -97,3 +98,5 @@ export default function App() {
         </div>
     );
 }
+
+
