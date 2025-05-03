@@ -5,7 +5,7 @@ import ActivityCard from './components/ActivityCard';
 
 export default function App() {
     const [activities, setActivities] = useState([]);
-    const [sessions, setSessions] = useState([]);
+    const [activeSession, setActiveSession] = useState(null);
     const [now, setNow] = useState(Date.now());
 
     useEffect(() => {
@@ -14,57 +14,52 @@ export default function App() {
     }, []);
 
     useEffect(() => {
-        fetchActivities();
-        fetchSessions();
+        fetchAll();
 
         const ch = supabase
             .channel('public:activity_session')
             .on('postgres_changes',
                 { event: '*', schema: 'public', table: 'activity_session' },
-                fetchSessions)
+                fetchAll)
             .subscribe();
 
         return () => supabase.removeChannel(ch);
     }, []);
 
-    const fetchActivities = async () => {
-        const { data } = await supabase.from('activities').select('*');
-        setActivities(data.sort((a, b) => b.pinned - a.pinned));
-    };
+    const fetchAll = async () => {
+        const act = await supabase.from('activities').select('*');
+        setActivities(act.data.sort((a, b) => b.pinned - a.pinned));
 
-    const fetchSessions = async () => {
-        const { data } = await supabase
+        const sess = await supabase
             .from('activity_session')
             .select('id, activity_id, start_time, end_time')
-            .order('start_time', { ascending: false }); // prendi la più recente
+            .order('start_time', { ascending: false });
 
-        setSessions(data);
+        // Prende solo la sessione attiva più recente (senza end_time)
+        const latestActive = sess.data.find(s => s.end_time === null);
+        setActiveSession(latestActive);
     };
 
     const start = async id => {
-        const active = sessions.find(s => !s.end_time);
-        if (active) {
+        if (activeSession) {
             alert("Hai già un'attività in corso. Fermala prima.");
             return;
         }
         await supabase.from('activity_session').insert({ activity_id: id });
-        await fetchSessions(); // aggiorna subito
+        await fetchAll();
     };
 
-    const stop = async sid => {
+    const stop = async () => {
+        if (!activeSession) return;
         await supabase
             .from('activity_session')
             .update({ end_time: new Date().toISOString() })
-            .eq('id', sid);
-        await fetchSessions(); // aggiorna subito
+            .eq('id', activeSession.id);
+        await fetchAll();
     };
 
     const togglePin = (id, p) =>
         supabase.from('activities').update({ pinned: p }).eq('id', id);
-
-    // trova sessione attiva globale
-    const active = sessions.find(s => !s.end_time);
-    const activeActivity = activities.find(a => a.id === active?.activity_id);
 
     const formatHMS = sec => {
         const h = String(Math.floor(sec / 3600)).padStart(2, '0');
@@ -74,11 +69,12 @@ export default function App() {
     };
 
     let header = null;
-    if (active && activeActivity) {
-        const diff = Math.floor((now - new Date(active.start_time)) / 1000);
+    const activeActivity = activities.find(a => a.id === activeSession?.activity_id);
+    if (activeSession && activeActivity) {
+        const elapsed = Math.floor((now - new Date(activeSession.start_time)) / 1000);
         header = (
             <div className="bg-yellow-100 p-4 mb-4 font-bold rounded">
-                ⏰ Attività attiva: {activeActivity.name} – {formatHMS(diff)}
+                ⏰ Attività attiva: {activeActivity.name} – {formatHMS(elapsed)}
             </div>
         );
     }
@@ -88,19 +84,18 @@ export default function App() {
             <h1 className="text-3xl mb-4 font-bold">FastLife 🚀</h1>
 
             {header}
-            <AddActivity onAdd={fetchActivities} />
+            <AddActivity onAdd={fetchAll} />
 
             <div className="space-y-3">
                 {activities.map(a => {
-                    // trova la sessione attiva specifica per questa attività
-                    const session = sessions.find(s => s.activity_id === a.id && !s.end_time);
+                    const isActive = activeSession?.activity_id === a.id;
                     return (
                         <ActivityCard
                             key={a.id}
                             activity={a}
-                            activeSession={session}
+                            activeSession={isActive ? activeSession : null}
                             onStart={() => start(a.id)}
-                            onStop={() => session && stop(session.id)}
+                            onStop={stop}
                             onTogglePin={() => togglePin(a.id, !a.pinned)}
                         />
                     );
