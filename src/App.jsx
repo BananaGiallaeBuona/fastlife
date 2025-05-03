@@ -6,6 +6,12 @@ import ActivityCard from './components/ActivityCard';
 export default function App() {
     const [activities, setActivities] = useState([]);
     const [sessions, setSessions] = useState([]);
+    const [now, setNow] = useState(Date.now());
+
+    useEffect(() => {
+        const i = setInterval(() => setNow(Date.now()), 1000);
+        return () => clearInterval(i);
+    }, []);
 
     useEffect(() => {
         fetchActivities();
@@ -29,8 +35,9 @@ export default function App() {
     const fetchSessions = async () => {
         const { data } = await supabase
             .from('activity_session')
-            .select('id,activity_id,start_time,end_time')
-            .order('start_time', { ascending: true });
+            .select('id, activity_id, start_time, end_time')
+            .order('start_time', { ascending: false }); // prendi la più recente
+
         setSessions(data);
     };
 
@@ -41,55 +48,59 @@ export default function App() {
             return;
         }
         await supabase.from('activity_session').insert({ activity_id: id });
-        await fetchSessions(); // ⬅ AGGIUNTO: forza aggiornamento
+        await fetchSessions(); // aggiorna subito
     };
 
-    const stop = sid =>
-        supabase.from('activity_session')
+    const stop = async sid => {
+        await supabase
+            .from('activity_session')
             .update({ end_time: new Date().toISOString() })
             .eq('id', sid);
+        await fetchSessions(); // aggiorna subito
+    };
 
     const togglePin = (id, p) =>
         supabase.from('activities').update({ pinned: p }).eq('id', id);
+
+    // trova sessione attiva globale
+    const active = sessions.find(s => !s.end_time);
+    const activeActivity = activities.find(a => a.id === active?.activity_id);
+
+    const formatHMS = sec => {
+        const h = String(Math.floor(sec / 3600)).padStart(2, '0');
+        const m = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
+        const s = String(sec % 60).padStart(2, '0');
+        return `${h}:${m}:${s}`;
+    };
+
+    let header = null;
+    if (active && activeActivity) {
+        const diff = Math.floor((now - new Date(active.start_time)) / 1000);
+        header = (
+            <div className="bg-yellow-100 p-4 mb-4 font-bold rounded">
+                ⏰ Attività attiva: {activeActivity.name} – {formatHMS(diff)}
+            </div>
+        );
+    }
 
     return (
         <div className="p-6 max-w-xl mx-auto">
             <h1 className="text-3xl mb-4 font-bold">FastLife 🚀</h1>
 
-            {/* TIMER ATTIVO IN TESTA */}
-            {(() => {
-                const active = sessions.find(s => !s.end_time);
-                const activity = activities.find(a => a.id === active?.activity_id);
-                if (!active || !activity) return null;
-
-                const start = new Date(active.start_time);
-                const now = Date.now();
-                const diffSec = Math.floor((now - start.getTime()) / 1000);
-                const h = String(Math.floor(diffSec / 3600)).padStart(2, '0');
-                const m = String(Math.floor((diffSec % 3600) / 60)).padStart(2, '0');
-                const s = String(diffSec % 60).padStart(2, '0');
-
-                return (
-                    <div style={{ background: '#fef9c3', padding: '12px', marginBottom: '16px', fontWeight: 'bold' }}>
-                        ⏱ Attività attiva: {activity.name} – {h}:{m}:{s}
-                    </div>
-                );
-            })()}
-
+            {header}
             <AddActivity onAdd={fetchActivities} />
 
             <div className="space-y-3">
                 {activities.map(a => {
-                    const active = sessions.find(
-                        s => s.activity_id === a.id && !s.end_time
-                    );
+                    // trova la sessione attiva specifica per questa attività
+                    const session = sessions.find(s => s.activity_id === a.id && !s.end_time);
                     return (
                         <ActivityCard
                             key={a.id}
                             activity={a}
-                            activeSession={active}
+                            activeSession={session}
                             onStart={() => start(a.id)}
-                            onStop={() => active && stop(active.id)}
+                            onStop={() => session && stop(session.id)}
                             onTogglePin={() => togglePin(a.id, !a.pinned)}
                         />
                     );
@@ -98,5 +109,3 @@ export default function App() {
         </div>
     );
 }
-
-
