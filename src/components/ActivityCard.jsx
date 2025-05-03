@@ -2,30 +2,40 @@
 
 export default function ActivityCard({ activity, activeSession, onStart, onStop, onTogglePin }) {
     const [elapsed, setElapsed] = useState(0);
+    const [isRunning, setIsRunning] = useState(!!activeSession);
 
-    // Calcolo tempo passato
     useEffect(() => {
-        if (!activeSession || !activeSession.start_time) return;
+        if (!activeSession || !activeSession.start_time) {
+            setIsRunning(false);
+            return;
+        }
 
+        setIsRunning(true);
         const start = new Date(activeSession.start_time);
 
         const tick = () => {
             const now = Date.now();
-            const diff = Math.floor((now - start.getTime()) / 1000); // in secondi
+            const diff = Math.floor((now - start.getTime()) / 1000);
             setElapsed(diff);
         };
 
-        tick(); // primo calcolo immediato
+        tick(); // calcolo iniziale
         const interval = setInterval(tick, 1000);
-
         return () => clearInterval(interval);
     }, [activeSession]);
 
-    // Format mm:ss
+    const handleStop = async () => {
+        if (activeSession && activeSession.id) {
+            await onStop();
+            setIsRunning(false);
+        }
+    };
+
     const formatTime = seconds => {
-        const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
+        const hh = String(Math.floor(seconds / 3600)).padStart(2, '0');
+        const mm = String(Math.floor((seconds % 3600) / 60)).padStart(2, '0');
         const ss = String(seconds % 60).padStart(2, '0');
-        return `${mm}:${ss}`;
+        return `${hh}:${mm}:${ss}`;
     };
 
     return (
@@ -33,8 +43,8 @@ export default function ActivityCard({ activity, activeSession, onStart, onStop,
             <h2 className="text-xl font-semibold">{activity.name}</h2>
 
             <div className="flex items-center gap-2 mt-2">
-                {activeSession ? (
-                    <button onClick={onStop}>
+                {isRunning ? (
+                    <button onClick={handleStop}>
                         Stop ({formatTime(elapsed)})
                     </button>
                 ) : (
