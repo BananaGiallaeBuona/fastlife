@@ -35,17 +35,11 @@ export default function App() {
     };
 
     const start = async id => {
-        // Blocco: una sola sessione attiva per volta
-        const { data: activeSessions, error } = await supabase
-            .from('activity_session')
-            .select('id')
-            .is('end_time', null);
-
-        if (activeSessions?.length > 0) {
+        const active = sessions.find(s => !s.end_time);
+        if (active) {
             alert("Hai già un'attività in corso. Fermala prima di iniziarne un'altra.");
             return;
         }
-
         await supabase.from('activity_session').insert({ activity_id: id });
     };
 
@@ -60,7 +54,29 @@ export default function App() {
     return (
         <div className="p-6 max-w-xl mx-auto">
             <h1 className="text-3xl mb-4 font-bold">FastLife 🚀</h1>
+
+            {/* TIMER ATTIVO IN TESTA */}
+            {(() => {
+                const active = sessions.find(s => !s.end_time);
+                const activity = activities.find(a => a.id === active?.activity_id);
+                if (!active || !activity) return null;
+
+                const start = new Date(active.start_time);
+                const now = Date.now();
+                const diffSec = Math.floor((now - start.getTime()) / 1000);
+                const h = String(Math.floor(diffSec / 3600)).padStart(2, '0');
+                const m = String(Math.floor((diffSec % 3600) / 60)).padStart(2, '0');
+                const s = String(diffSec % 60).padStart(2, '0');
+
+                return (
+                    <div style={{ background: '#fef9c3', padding: '12px', marginBottom: '16px', fontWeight: 'bold' }}>
+                        ⏱ Attività attiva: {activity.name} – {h}:{m}:{s}
+                    </div>
+                );
+            })()}
+
             <AddActivity onAdd={fetchActivities} />
+
             <div className="space-y-3">
                 {activities.map(a => {
                     const active = sessions.find(
