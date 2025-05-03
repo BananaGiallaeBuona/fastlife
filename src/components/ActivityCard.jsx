@@ -1,25 +1,21 @@
-﻿// FILE: src/components/ActivityCard.jsx
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
 
 export default function ActivityCard({ activity, session }) {
     const [elapsed, setElapsed] = useState('00:00');
     const [intervalId, setIntervalId] = useState(null);
     const [activeSession, setActiveSession] = useState(session);
-    const [pinned, setPinned] = useState(false);
+    const [pinned, setPinned] = useState(activity.pinned || false);
 
     useEffect(() => {
         setActiveSession(session);
     }, [session]);
 
     useEffect(() => {
-        const localPin = localStorage.getItem(`pin-${activity.id}`);
-        if (localPin === 'true') setPinned(true);
-    }, [activity.id]);
+        if (activeSession?.start_time) {
+            const start = new Date(activeSession.start_time);
+            if (isNaN(start)) return;
 
-    useEffect(() => {
-        if (activeSession) {
-            const start = new Date(activeSession.created_at);
             const id = setInterval(() => {
                 const now = new Date();
                 const diff = Math.floor((now - start) / 1000);
@@ -38,25 +34,42 @@ export default function ActivityCard({ activity, session }) {
     const startSession = async () => {
         const { data, error } = await supabase
             .from('activity_session')
-            .insert({ activity_id: activity.id })
+            .insert({ activity_id: activity.id, start_time: new Date().toISOString() })
             .select()
             .single();
-        if (!error) setActiveSession(data);
+        if (!error && data?.start_time) {
+            setActiveSession(data);
+        } else {
+            console.error('Start session error:', error);
+        }
     };
 
     const stopSession = async () => {
-        if (!activeSession) return;
+        if (!activeSession?.id) return;
+        const end = new Date();
+        const start = new Date(activeSession.start_time);
+        const durationSec = Math.floor((end - start) / 1000);
+
         const { error } = await supabase
             .from('activity_session')
-            .update({ ended_at: new Date().toISOString() })
+            .update({ end_time: end.toISOString(), duration: durationSec })
             .eq('id', activeSession.id);
-        if (!error) setActiveSession(null);
+
+        if (!error) {
+            setActiveSession(null);
+        } else {
+            console.error('Stop session error:', error);
+        }
     };
 
-    const togglePin = () => {
+    const togglePin = async () => {
         const newPin = !pinned;
         setPinned(newPin);
-        localStorage.setItem(`pin-${activity.id}`, newPin);
+        const { error } = await supabase
+            .from('activities')
+            .update({ pinned: newPin })
+            .eq('id', activity.id);
+        if (error) console.error('Failed to update pin:', error);
     };
 
     return (
