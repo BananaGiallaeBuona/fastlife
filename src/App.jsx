@@ -1,84 +1,88 @@
-﻿import { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
 import AddActivity from './components/AddActivity';
 import ActivityCard from './components/ActivityCard';
 
-export default function App() {
-  const [activities, setActivities] = useState([]);
-  const [sessions, setSessions] = useState([]);
+function App() {
+    const [activities, setActivities] = useState([]);
+    const [sessions, setSessions] = useState([]);
 
-  // ───────────────────────────────────────── load once
-  useEffect(() => {
-    loadActivities();
-    loadSessions();
+    useEffect(() => {
+        fetchActivities();
+        fetchSessions();
 
-    const channel = supabase
-      .channel('public:activity_session')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'activity_session' },
-        loadSessions
-      )
-      .subscribe();
+        const channel = supabase
+            .channel('public:activity_session')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'activity_session' },
+                () => fetchSessions()
+            )
+            .subscribe();
 
-    return () => supabase.removeChannel(channel);
-  }, []);
+        return () => { supabase.removeChannel(channel); };
+    }, []);
 
-  // ───────────────────────────────────────── helpers
-  async function loadActivities() {
-    const { data, error } = await supabase.from('activities').select('*');
-    if (error) return console.error(error);
-    setActivities(data.sort((a, b) => Number(b.pinned) - Number(a.pinned)));
-  }
+    async function fetchActivities() {
+        const { data, error } = await supabase
+            .from('activities')
+            .select('*');
+        if (!error) setActivities(data.sort((a, b) => b.pinned - a.pinned));
+    }
 
-  async function loadSessions() {
-    const { data, error } = await supabase
-      .from('activity_session')
-      .select('id, activity_id, started_at, ended_at')
-      .order('started_at', { ascending: true });        // <- sintassi corretta
+    async function fetchSessions() {
+        const { data, error } = await supabase
+            .from('activity_session')
+            .select('id, activity_id, created_at, ended_at')
+            .is('ended_at', null)
+            .order('created_at', { ascending: true });
+        if (!error) setSessions(data);
+    }
 
-    if (error) return console.error(error);
-    setSessions(data);
-  }
+    const handleStart = async (activityId) => {
+        await supabase
+            .from('activity_session')
+            .insert({ activity_id: activityId });
+    };
 
-  async function startSession(activity_id) {
-    await supabase.from('activity_session').insert({ activity_id });
-  }
+    const handleStop = async (sessionId) => {
+        await supabase
+            .from('activity_session')
+            .update({ ended_at: new Date().toISOString() })
+            .eq('id', sessionId);
+    };
 
-  async function stopSession(session_id) {
-    await supabase
-      .from('activity_session')
-      .update({ ended_at: new Date().toISOString() })
-      .eq('id', session_id);
-  }
+    const togglePin = async (activityId, pinned) => {
+        await supabase
+            .from('activities')
+            .update({ pinned })
+            .eq('id', activityId);
+        fetchActivities();
+    };
 
-  async function togglePin(id, pinned) {
-    await supabase.from('activities').update({ pinned }).eq('id', id);
-    loadActivities();
-  }
-
-  // ───────────────────────────────────────── UI
-  return (
-    <div className="p-8 max-w-xl mx-auto">
-      <h1 className="text-3xl mb-6">FastLife 🚀</h1>
-
-      <AddActivity onAdd={loadActivities} />
-
-      <div className="space-y-6">
-        {activities.map((a) => {
-          const active = sessions.find((s) => s.activity_id === a.id && !s.ended_at);
-          return (
-            <ActivityCard
-              key={a.id}
-              activity={a}
-              activeSession={active}
-              onStart={() => startSession(a.id)}
-              onStop={() => stopSession(active?.id)}
-              onTogglePin={() => togglePin(a.id, !a.pinned)}
-            />
-          );
-        })}
-      </div>
-    </div>
-  );
+    return (
+        <div className="p-8 max-w-xl mx-auto">
+            <h1 className="text-3xl mb-6">FastLife 🚀</h1>
+            <AddActivity onAdd={fetchActivities} />
+            <div className="space-y-4">
+                {activities.map(act => {
+                    const activeSession = sessions.find(
+                        s => s.activity_id === act.id
+                    );
+                    return (
+                        <ActivityCard
+                            key={act.id}
+                            activity={act}
+                            activeSession={activeSession}
+                            onStart={() => handleStart(act.id)}
+                            onStop={() => handleStop(activeSession.id)}
+                            onTogglePin={() => togglePin(act.id, !act.pinned)}
+                        />
+                    );
+                })}
+            </div>
+        </div>
+    );
 }
+
+export default App;
