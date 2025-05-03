@@ -1,47 +1,53 @@
 ﻿import React, { useEffect, useState } from 'react';
+import { supabase } from '../supabaseClient';
 
-export default function ActivityCard({
-    activity,
-    activeSession,
-    onStart,
-    onStop,
-    onTogglePin
-}) {
-    const [elapsed, setElapsed] = useState(0);
+export default function ActivityCard({ activity, session }) {
+    const [running, setRunning] = useState(!!session);
+    const [startTime, setStartTime] = useState(session ? new Date(session.created_at) : null);
+    const [elapsed, setElapsed] = useState('00:00');
+    const [timerId, setTimerId] = useState(null);
 
-    // Calcola e aggiorna l'orologio live
     useEffect(() => {
-        if (!activeSession) {
-            setElapsed(0);
-            return;
+        if (running && startTime) {
+            const id = setInterval(() => {
+                const now = new Date();
+                const diff = Math.floor((now - startTime) / 1000);
+                const mm = String(Math.floor(diff / 60)).padStart(2, '0');
+                const ss = String(diff % 60).padStart(2, '0');
+                setElapsed(`${mm}:${ss}`);
+            }, 1000);
+            setTimerId(id);
+            return () => clearInterval(id);
         }
-        const start = new Date(activeSession.created_at).getTime();
-        function tick() {
-            setElapsed(Math.floor((Date.now() - start) / 1000));
-        }
-        tick();
-        const iv = setInterval(tick, 1000);
-        return () => clearInterval(iv);
-    }, [activeSession]);
+    }, [running, startTime]);
 
-    // formattazione mm:ss
-    const mm = String(Math.floor(elapsed / 60)).padStart(2, '0');
-    const ss = String(elapsed % 60).padStart(2, '0');
+    const startSession = async () => {
+        const { data, error } = await supabase.from('activity_session').insert({
+            activity_id: activity.id,
+        }).select().single();
+        if (!error) {
+            setStartTime(new Date(data.created_at));
+            setRunning(true);
+        }
+    };
+
+    const stopSession = async () => {
+        const { error } = await supabase
+            .from('activity_session')
+            .update({ ended_at: new Date().toISOString() })
+            .eq('id', session.id);
+        if (!error) {
+            clearInterval(timerId);
+            setRunning(false);
+        }
+    };
 
     return (
-        <div className="border p-4 rounded shadow">
-            <h2 className="text-xl font-bold">{activity.name}</h2>
-            <div className="mt-2">
-                {activeSession
-                    ? <button onClick={onStop} className="px-3 py-1 bg-red-500 text-white rounded">
-                        Stop ({mm}:{ss})
-                    </button>
-                    : <button onClick={onStart} className="px-3 py-1 bg-green-500 text-white rounded">
-                        Start
-                    </button>
-                }
-                <button onClick={onTogglePin} className="ml-2">📌</button>
-            </div>
+        <div style={{ marginBottom: '1rem' }}>
+            <h2>{activity.name}</h2>
+            <button onClick={running ? stopSession : startSession}>
+                {running ? `Stop (${elapsed})` : 'Start'}
+            </button>
         </div>
     );
 }
