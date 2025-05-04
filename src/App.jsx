@@ -1,4 +1,5 @@
-﻿import React, { useEffect, useState } from 'react';
+﻿// FILE: src/App.jsx
+import React, { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
 import AddActivity from './components/AddActivity';
 import ActivityCard from './components/ActivityCard';
@@ -7,7 +8,6 @@ export default function App() {
     const [activities, setActivities] = useState([]);
     const [sessions, setSessions] = useState([]);
 
-    // fetch iniziale + realtime
     useEffect(() => {
         fetchActivities();
         fetchSessions();
@@ -38,7 +38,7 @@ export default function App() {
     const start = async id => {
         const { data: running } = await supabase
             .from('activity_session')
-            .select('id')
+            .select('*')
             .is('end_time', null);
 
         if (running.length > 0) {
@@ -46,48 +46,68 @@ export default function App() {
             return;
         }
 
-        await supabase.from('activity_session').insert({ activity_id: id, start_time: new Date().toISOString() });
+        await supabase.from('activity_session').insert({
+            activity_id: id,
+            start_time: new Date().toISOString()
+        });
     };
 
-    const stop = async (sid) => {
-        const { error } = await supabase
-            .from('activity_session')
-            .update({ end_time: new Date().toISOString() })
-            .eq('id', sid);
+    const stop = async (session) => {
+        if (!session) return;
 
-        if (error) {
-            alert("Errore nella chiusura della sessione.");
-            console.error(error);
+        const endTime = new Date().toISOString();
+        const startTime = new Date(session.start_time);
+        const durationSec = Math.floor((new Date(endTime) - startTime) / 1000);
+
+        // Aggiorna la sessione con end_time e durata
+        await supabase
+            .from('activity_session')
+            .update({
+                end_time: endTime,
+                duration: durationSec
+            })
+            .eq('id', session.id);
+
+        // Aggiorna il tempo speso in attività
+        const activity = activities.find(a => a.id === session.activity_id);
+        const newSpent = (activity?.spentTime || 0) + durationSec;
+
+        await supabase
+            .from('activities')
+            .update({ spentTime: newSpent })
+            .eq('id', session.activity_id);
+
+        // Prompt per attività successiva
+        const next = prompt("Quale attività vuoi avviare ora? Scrivi il nome esatto:");
+        if (next) {
+            const nextActivity = activities.find(a => a.name.toLowerCase() === next.toLowerCase());
+            if (nextActivity) {
+                await start(nextActivity.id);
+            } else {
+                alert("Attività non trovata.");
+            }
         }
     };
 
     const togglePin = (id, p) =>
         supabase.from('activities').update({ pinned: p }).eq('id', id);
 
-    const activeSession = sessions.find(s => !s.end_time);
-    const activeActivity = activities.find(a => a.id === activeSession?.activity_id);
-
     return (
         <div className="p-6 max-w-xl mx-auto">
             <h1 className="text-3xl mb-4 font-bold">FastLife 🚀</h1>
-
-            {activeSession && activeActivity && (
-                <div className="bg-yellow-100 p-2 mb-4 rounded font-medium">
-                    🕰️ Attività attiva: {activeActivity.name} – <LiveTimer start={activeSession.start_time} />
-                </div>
-            )}
-
             <AddActivity onAdd={fetchActivities} />
             <div className="space-y-3">
                 {activities.map(a => {
-                    const session = sessions.find(s => s.activity_id === a.id && !s.end_time);
+                    const active = sessions.find(
+                        s => s.activity_id === a.id && !s.end_time
+                    );
                     return (
                         <ActivityCard
                             key={a.id}
                             activity={a}
-                            activeSession={session}
+                            activeSession={active}
                             onStart={() => start(a.id)}
-                            onStop={() => session && stop(session.id)}
+                            onStop={() => stop(active)}
                             onTogglePin={() => togglePin(a.id, !a.pinned)}
                         />
                     );
@@ -95,28 +115,4 @@ export default function App() {
             </div>
         </div>
     );
-}
-
-// live cronometro
-function LiveTimer({ start }) {
-    const [elapsed, setElapsed] = useState(0);
-
-    useEffect(() => {
-        if (!start) return;
-
-        const tick = () => {
-            const delta = Math.floor((Date.now() - new Date(start)) / 1000);
-            setElapsed(delta);
-        };
-
-        tick(); // subito
-        const interval = setInterval(tick, 1000);
-        return () => clearInterval(interval);
-    }, [start]);
-
-    const h = Math.floor(elapsed / 3600);
-    const m = Math.floor((elapsed % 3600) / 60);
-    const s = elapsed % 60;
-
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
