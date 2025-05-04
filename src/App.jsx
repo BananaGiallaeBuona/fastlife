@@ -87,12 +87,34 @@ export default function App() {
             .eq('id', session.activity_id);
 
         await fetchEverything(); // aggiorna UI dopo stop
-
-        
     };
 
     const togglePin = (id, p) =>
         supabase.from('activities').update({ pinned: p }).eq('id', id);
+
+    const handleSetStartOfWeek = async () => {
+        const today = new Date().toISOString().split('T')[0];
+
+        const { data } = await supabase
+            .from('weekly_markers')
+            .select('*')
+            .gte('created_at', `${today}T00:00:00Z`);
+
+        if (data.length > 0) {
+            alert("Hai già segnato l'inizio della settimana oggi.");
+            return;
+        }
+
+        const { error } = await supabase
+            .from('weekly_markers')
+            .insert({ created_at: new Date().toISOString() });
+
+        if (error) {
+            alert("Errore nel salvataggio. Riprova.");
+        } else {
+            alert("✅ Inizio settimana salvato con successo.");
+        }
+    };
 
     const activeSession = getActiveSession();
     const activeActivity = activities.find(a => a.id === activeSession?.activity_id);
@@ -110,9 +132,17 @@ export default function App() {
 
     return (
         <div className="p-6 max-w-xl mx-auto">
-            <h1 className="text-3xl mb-4 font-bold">FastLife 🚀</h1>
+            <div className="flex justify-between items-center mb-4">
+                <h1 className="text-3xl font-bold">FastLife 🚀</h1>
+                <button
+                    onClick={handleSetStartOfWeek}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm shadow"
+                >
+                    📍 Inizio Settimana
+                </button>
+            </div>
 
-            { activeSession && activeActivity && (
+            {activeSession && activeActivity && (
                 <div className="sticky top-0 z-50 bg-yellow-100 border-b border-yellow-300 shadow-md rounded-b px-4 py-3 mb-6">
                     <div className="flex items-center justify-between text-sm sm:text-base">
                         <div className="flex items-center gap-2 font-semibold text-yellow-900">
