@@ -8,47 +8,54 @@ export default function App() {
     const [activeSession, setActiveSession] = useState(null);
     const [now, setNow] = useState(Date.now());
 
+    /* ticker per aggiornare l’orologio di testa */
     useEffect(() => {
-        const i = setInterval(() => setNow(Date.now()), 1000);
-        return () => clearInterval(i);
+        const timer = setInterval(() => setNow(Date.now()), 1000);
+        return () => clearInterval(timer);
     }, []);
 
+    /* fetch + realtime */
     useEffect(() => {
         fetchAll();
 
         const ch = supabase
             .channel('public:activity_session')
-            .on('postgres_changes',
+            .on(
+                'postgres_changes',
                 { event: '*', schema: 'public', table: 'activity_session' },
-                fetchAll)
+                fetchAll
+            )
             .subscribe();
 
         return () => supabase.removeChannel(ch);
     }, []);
 
+    /* carica attività e sessione attiva */
     const fetchAll = async () => {
-        const act = await supabase.from('activities').select('*');
-        setActivities(act.data.sort((a, b) => b.pinned - a.pinned));
+        const actRes = await supabase.from('activities').select('*');
+        setActivities(actRes.data.sort((a, b) => b.pinned - a.pinned));
 
-        const sess = await supabase
+        const sessRes = await supabase
             .from('activity_session')
             .select('id, activity_id, start_time, end_time')
             .order('start_time', { ascending: false });
 
-        // Prende solo la sessione attiva più recente (senza end_time)
-        const latestActive = sess.data.find(s => s.end_time === null);
+        /* ultima sessione senza end_time */
+        const latestActive = sessRes.data.find(s => s.end_time === null);
         setActiveSession(latestActive);
     };
 
+    /* avvia nuova sessione */
     const start = async id => {
         if (activeSession) {
-            alert("Hai già un'attività in corso. Fermala prima.");
+            alert('Hai già un’attività in corso. Fermala prima.');
             return;
         }
         await supabase.from('activity_session').insert({ activity_id: id });
         await fetchAll();
     };
 
+    /* ferma la sessione corrente */
     const stop = async () => {
         if (!activeSession) return;
         await supabase
@@ -58,9 +65,11 @@ export default function App() {
         await fetchAll();
     };
 
+    /* (un‑)pin */
     const togglePin = (id, p) =>
         supabase.from('activities').update({ pinned: p }).eq('id', id);
 
+    /* hh:mm:ss helper */
     const formatHMS = sec => {
         const h = String(Math.floor(sec / 3600)).padStart(2, '0');
         const m = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
@@ -68,27 +77,31 @@ export default function App() {
         return `${h}:${m}:${s}`;
     };
 
-    let header = null;
-    const activeActivity = activities.find(a => a.id === activeSession?.activity_id);
-    if (activeSession && activeActivity) {
-        const elapsed = Math.floor((now - new Date(activeSession.start_time)) / 1000);
-        header = (
-            <div className="bg-yellow-100 p-4 mb-4 font-bold rounded">
-                ⏰ Attività attiva: {activeActivity.name} – {formatHMS(elapsed)}
-            </div>
-        );
-    }
+    /* header live */
+    const activeActivity = activities.find(
+        a => String(a.id) === String(activeSession?.activity_id)
+    );
 
     return (
         <div className="p-6 max-w-xl mx-auto">
             <h1 className="text-3xl mb-4 font-bold">FastLife 🚀</h1>
 
-            {header}
+            {activeSession && activeActivity && (
+                <div className="bg-yellow-100 p-4 mb-4 font-bold rounded">
+                    ⏰ Attività attiva: {activeActivity.name} –{' '}
+                    {formatHMS(
+                        Math.floor((now - new Date(activeSession.start_time)) / 1000)
+                    )}
+                </div>
+            )}
+
             <AddActivity onAdd={fetchAll} />
 
             <div className="space-y-3">
                 {activities.map(a => {
-                    const isActive = activeSession?.activity_id === a.id;
+                    const isActive =
+                        activeSession &&
+                        String(activeSession.activity_id) === String(a.id);
                     return (
                         <ActivityCard
                             key={a.id}
