@@ -35,25 +35,18 @@ export default function App() {
         setSessions(data);
     };
 
-    const start = async (id) => {
-        // Previeni doppie sessioni
-        const active = sessions.find(s => !s.end_time);
-        if (active) {
+    const start = async id => {
+        const { data: running } = await supabase
+            .from('activity_session')
+            .select('id')
+            .is('end_time', null);
+
+        if (running.length > 0) {
             alert("Hai già un'attività in corso. Fermala prima.");
             return;
         }
 
-        const { error } = await supabase.from('activity_session').insert([
-            {
-                activity_id: id,
-                start_time: new Date().toISOString(), // FIX CRUCIALE
-            }
-        ]);
-
-        if (error) {
-            alert("Errore nell'avvio della sessione.");
-            console.error(error);
-        }
+        await supabase.from('activity_session').insert({ activity_id: id, start_time: new Date().toISOString() });
     };
 
     const stop = async (sid) => {
