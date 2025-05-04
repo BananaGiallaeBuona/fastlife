@@ -5,110 +5,96 @@ import ActivityCard from './components/ActivityCard';
 
 export default function App() {
     const [activities, setActivities] = useState([]);
-    const [activeSession, setActiveSession] = useState(null);
-    const [now, setNow] = useState(Date.now());
+    const [sessions, setSessions] = useState([]);
 
-    /* ticker per aggiornare l’orologio di testa */
+    // fetch iniziale + realtime
     useEffect(() => {
-        const timer = setInterval(() => setNow(Date.now()), 1000);
-        return () => clearInterval(timer);
-    }, []);
-
-    /* fetch + realtime */
-    useEffect(() => {
-        fetchAll();
+        fetchActivities();
+        fetchSessions();
 
         const ch = supabase
             .channel('public:activity_session')
-            .on(
-                'postgres_changes',
+            .on('postgres_changes',
                 { event: '*', schema: 'public', table: 'activity_session' },
-                fetchAll
-            )
+                fetchSessions)
             .subscribe();
 
         return () => supabase.removeChannel(ch);
     }, []);
 
-    /* carica attività e sessione attiva */
-    const fetchAll = async () => {
-        const actRes = await supabase.from('activities').select('*');
-        setActivities(actRes.data.sort((a, b) => b.pinned - a.pinned));
-
-        const sessRes = await supabase
-            .from('activity_session')
-            .select('id, activity_id, start_time, end_time')
-            .order('start_time', { ascending: false });
-
-        /* ultima sessione senza end_time */
-        const latestActive = sessRes.data.find(s => s.end_time === null);
-        setActiveSession(latestActive);
+    const fetchActivities = async () => {
+        const { data } = await supabase.from('activities').select('*');
+        setActivities(data.sort((a, b) => b.pinned - a.pinned));
     };
 
-    /* avvia nuova sessione */
-    const start = async id => {
-        if (activeSession) {
-            alert('Hai già un’attività in corso. Fermala prima.');
+    const fetchSessions = async () => {
+        const { data } = await supabase
+            .from('activity_session')
+            .select('id,activity_id,start_time,end_time')
+            .order('start_time', { ascending: true });
+        setSessions(data);
+    };
+
+    const start = async (id) => {
+        // Previeni doppie sessioni
+        const active = sessions.find(s => !s.end_time);
+        if (active) {
+            alert("Hai già un'attività in corso. Fermala prima.");
             return;
         }
-        await supabase.from('activity_session').insert({ activity_id: id });
-        await fetchAll();
+
+        const { error } = await supabase.from('activity_session').insert([
+            {
+                activity_id: id,
+                start_time: new Date().toISOString(), // FIX CRUCIALE
+            }
+        ]);
+
+        if (error) {
+            alert("Errore nell'avvio della sessione.");
+            console.error(error);
+        }
     };
 
-    /* ferma la sessione corrente */
-    const stop = async () => {
-        if (!activeSession) return;
-        await supabase
+    const stop = async (sid) => {
+        const { error } = await supabase
             .from('activity_session')
             .update({ end_time: new Date().toISOString() })
-            .eq('id', activeSession.id);
-        await fetchAll();
+            .eq('id', sid);
+
+        if (error) {
+            alert("Errore nella chiusura della sessione.");
+            console.error(error);
+        }
     };
 
-    /* (un‑)pin */
     const togglePin = (id, p) =>
         supabase.from('activities').update({ pinned: p }).eq('id', id);
 
-    /* hh:mm:ss helper */
-    const formatHMS = sec => {
-        const h = String(Math.floor(sec / 3600)).padStart(2, '0');
-        const m = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
-        const s = String(sec % 60).padStart(2, '0');
-        return `${h}:${m}:${s}`;
-    };
-
-    /* header live */
-    const activeActivity = activities.find(
-        a => String(a.id) === String(activeSession?.activity_id)
-    );
+    const activeSession = sessions.find(s => !s.end_time);
+    const activeActivity = activities.find(a => a.id === activeSession?.activity_id);
 
     return (
         <div className="p-6 max-w-xl mx-auto">
             <h1 className="text-3xl mb-4 font-bold">FastLife 🚀</h1>
 
             {activeSession && activeActivity && (
-                <div className="bg-yellow-100 p-4 mb-4 font-bold rounded">
-                    ⏰ Attività attiva: {activeActivity.name} –{' '}
-                    {formatHMS(
-                        Math.floor((now - new Date(activeSession.start_time)) / 1000)
-                    )}
+                <div className="bg-yellow-100 p-2 mb-4 rounded font-medium">
+                    🕰️ Attività attiva: {activeActivity.name} – <LiveTimer start={activeSession.start_time} />
                 </div>
             )}
 
-            <AddActivity onAdd={fetchAll} />
-
+            <AddActivity onAdd={fetchActivities} />
             <div className="space-y-3">
                 {activities.map(a => {
-                    const isActive =
-                        activeSession &&
-                        String(activeSession.activity_id) === String(a.id);
+                    const session = sessions.find(s => s.activity_id === a.id && !s.end_time);
                     return (
                         <ActivityCard
                             key={a.id}
                             activity={a}
-                            activeSession={isActive ? activeSession : null}
+                            activeSession={session}
                             onStart={() => start(a.id)}
-                            onStop={stop}
+                            onStop={() => session && stop(session.id)}
                             onTogglePin={() => togglePin(a.id, !a.pinned)}
                         />
                     );
@@ -116,4 +102,28 @@ export default function App() {
             </div>
         </div>
     );
+}
+
+// live cronometro
+function LiveTimer({ start }) {
+    const [elapsed, setElapsed] = useState(0);
+
+    useEffect(() => {
+        if (!start) return;
+
+        const tick = () => {
+            const delta = Math.floor((Date.now() - new Date(start)) / 1000);
+            setElapsed(delta);
+        };
+
+        tick(); // subito
+        const interval = setInterval(tick, 1000);
+        return () => clearInterval(interval);
+    }, [start]);
+
+    const h = Math.floor(elapsed / 3600);
+    const m = Math.floor((elapsed % 3600) / 60);
+    const s = elapsed % 60;
+
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
