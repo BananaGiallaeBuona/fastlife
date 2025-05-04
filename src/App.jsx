@@ -41,10 +41,21 @@ export default function App() {
     const getActiveSession = () => sessions.find(s => !s.end_time);
 
     const start = async id => {
-        const active = getActiveSession();
-        if (active) {
-            alert("Hai già un'attività in corso. Fermala prima.");
-            return;
+        const current = getActiveSession();
+
+        if (current) {
+            const currentActivity = activities.find(a => a.id === current.activity_id);
+            if (current.activity_id === id) {
+                alert("Questa attività è già in corso.");
+                return;
+            }
+
+            const conferma = confirm(
+                `Attualmente è attiva "${currentActivity.name}". Vuoi fermarla e avviare "${activities.find(a => a.id === id).name}"?`
+            );
+            if (!conferma) return;
+
+            await stop(current); // ferma quella attiva
         }
 
         await supabase.from('activity_session').insert({
