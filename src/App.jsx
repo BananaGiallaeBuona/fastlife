@@ -88,17 +88,7 @@ export default function App() {
 
         await fetchEverything(); // aggiorna UI dopo stop
 
-        const next = prompt("Quale attività vuoi avviare ora?");
-        if (next) {
-            const nextActivity = activities.find(
-                a => a.name.toLowerCase() === next.toLowerCase()
-            );
-            if (nextActivity) {
-                await start(nextActivity.id); // start già richiama fetchEverything
-            } else {
-                alert("Attività non trovata.");
-            }
-        }
+        
     };
 
     const togglePin = (id, p) =>
