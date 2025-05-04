@@ -112,9 +112,20 @@ export default function App() {
         <div className="p-6 max-w-xl mx-auto">
             <h1 className="text-3xl mb-4 font-bold">FastLife 🚀</h1>
 
-            {activeSession && activeActivity && (
-                <div className="bg-yellow-100 p-3 mb-5 rounded font-semibold">
-                    ⏱ Attività attiva: {activeActivity.name} – {formatHMS(elapsed)}
+            { activeSession && activeActivity && (
+                <div className="sticky top-0 z-50 bg-yellow-100 border-b border-yellow-300 shadow-md rounded-b px-4 py-3 mb-6">
+                    <div className="flex items-center justify-between text-sm sm:text-base">
+                        <div className="flex items-center gap-2 font-semibold text-yellow-900">
+                            <span>⚡</span>
+                            <span>
+                                Attività attiva:
+                                <span className="ml-1 font-bold">{activeActivity.name}</span>
+                            </span>
+                        </div>
+                        <span className="font-mono text-yellow-800 text-lg sm:text-xl tracking-tight tabular-nums">
+                            {formatHMS(elapsed)}
+                        </span>
+                    </div>
                 </div>
             )}
 
