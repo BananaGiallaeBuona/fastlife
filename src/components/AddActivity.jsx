@@ -7,9 +7,22 @@ export default function AddActivity({ onAdd }) {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        await supabase
+
+        const { error } = await supabase
             .from('activities')
-            .insert({ name, weeklyGoal: parseFloat(weeklyGoal), spentTime: 0 });
+            .insert({
+                name,
+                weekly_goal: parseFloat(weeklyGoal),
+                spentTime: 0,
+                pinned: false
+            });
+
+        if (error) {
+            console.error('Errore Supabase:', error.message);
+            alert('Errore durante il salvataggio. Controlla i dati e riprova.');
+            return;
+        }
+
         setName('');
         setWeeklyGoal('');
         onAdd();
@@ -22,16 +35,20 @@ export default function AddActivity({ onAdd }) {
                 placeholder="Nome attività"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
+                required
             />
             <input
+                type="number"
                 className="border p-2 w-24"
-                placeholder="Obiettivo sett."
+                placeholder="Ore sett."
                 value={weeklyGoal}
                 onChange={(e) => setWeeklyGoal(e.target.value)}
+                required
+                min="0"
             />
             <button
                 type="submit"
-                className="bg-blue-600 text-white px-4 rounded"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 rounded"
             >
                 Aggiungi
             </button>
