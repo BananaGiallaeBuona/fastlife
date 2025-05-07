@@ -55,7 +55,7 @@ export default function App() {
             );
             if (!conferma) return;
 
-            await stop(current); // ferma quella attiva
+            await stop(current);
         }
 
         await supabase.from('activity_session').insert({
@@ -63,7 +63,7 @@ export default function App() {
             start_time: new Date().toISOString()
         });
 
-        await fetchEverything(); // sincronizza subito la UI
+        await fetchEverything();
     };
 
     const stop = async session => {
@@ -86,13 +86,21 @@ export default function App() {
             .update({ spentTime: newSpent })
             .eq('id', session.activity_id);
 
-        await fetchEverything(); // aggiorna UI dopo stop
-
-        
+        await fetchEverything();
     };
 
-    const togglePin = (id, p) =>
-        supabase.from('activities').update({ pinned: p }).eq('id', id);
+    const togglePin = async (id, currentPinned) => {
+        const { error } = await supabase
+            .from('activities')
+            .update({ pinned: !currentPinned })
+            .eq('id', id);
+
+        if (error) {
+            alert('Errore nel salvataggio del pin.');
+        } else {
+            fetchEverything();
+        }
+    };
 
     const activeSession = getActiveSession();
     const activeActivity = activities.find(a => a.id === activeSession?.activity_id);
@@ -110,19 +118,20 @@ export default function App() {
 
     return (
         <div className="p-6 max-w-xl mx-auto">
-            <h1 className="text-3xl mb-4 font-bold">FastLife 🚀</h1>
+            <div className="flex justify-between items-center mb-4">
+                <h1 className="text-3xl font-bold">FastLife 🚀</h1>
+            </div>
 
-            { activeSession && activeActivity && (
-                <div className="sticky top-0 z-50 bg-yellow-100 border-b border-yellow-300 shadow-md rounded-b px-4 py-3 mb-6">
-                    <div className="flex items-center justify-between text-sm sm:text-base">
-                        <div className="flex items-center gap-2 font-semibold text-yellow-900">
-                            <span>⚡</span>
-                            <span>
-                                Attività attiva:
-                                <span className="ml-1 font-bold">{activeActivity.name}</span>
+            {activeSession && activeActivity && (
+                <div className="sticky top-0 z-50 bg-yellow-100 border-b-4 border-yellow-400 shadow-lg px-6 py-5 mb-8 rounded-b-xl">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 text-yellow-900">
+                            <span className="text-4xl">⚡</span>
+                            <span className="text-2xl sm:text-3xl font-extrabold leading-tight tracking-tight">
+                                Attività attiva: <span className="underline">{activeActivity.name}</span>
                             </span>
                         </div>
-                        <span className="font-mono text-yellow-800 text-lg sm:text-xl tracking-tight tabular-nums">
+                        <span className="font-mono text-3xl sm:text-4xl text-yellow-800 tracking-widest tabular-nums animate-pulse-fast">
                             {formatHMS(elapsed)}
                         </span>
                     </div>
@@ -143,7 +152,7 @@ export default function App() {
                             activeSession={session}
                             onStart={() => start(a.id)}
                             onStop={() => stop(session)}
-                            onTogglePin={() => togglePin(a.id, !a.pinned)}
+                            onTogglePin={() => togglePin(a.id, a.pinned)}
                         />
                     );
                 })}
